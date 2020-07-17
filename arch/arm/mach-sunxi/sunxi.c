@@ -15,6 +15,8 @@
 #include <linux/of_clk.h>
 #include <linux/platform_device.h>
 #include <linux/reset/sunxi.h>
+#include <linux/of_address.h>
+#include <linux/delay.h>
 
 #include <asm/mach/arch.h>
 #include <asm/secure_cntvoff.h>
@@ -107,6 +109,41 @@ static const char * const suniv_board_dt_compat[] = {
 	NULL,
 };
 
+#define WDOG_CTRL_OFFSET	0x10
+#define WDOG_CFG_OFFSET		0x14
+#define WDOG_MODE_OFFSET	0x18
+
+#define WDT_CTRL_RESTART	(0x1)
+#define WDT_CTRL_KEY		(0x0a57 << 1)
+#define WDT_CFG_RESET		(0x1)
+#define WDT_MODE_EN			(0x1)
+
+static void suniv_restart(enum reboot_mode mode, const char *cmd)
+{
+	void __iomem *base;
+	struct device_node *np_wdog;
+
+	np_wdog = of_find_compatible_node(NULL, NULL, "allwinner,suniv-f1c100s-wdt");
+	if (!np_wdog) {
+		pr_emerg("Couldn't find allwinner,suniv-f1c100s-wdt\n");
+		return;
+	}
+	base = of_iomap(np_wdog, 0);
+	if (!base) {
+		pr_emerg("Couldn't map allwinner,suniv-f1c100s-wdt\n");
+		return;
+	}
+
+	/* Enable watchdog with short timeout. */
+	writel(WDT_CFG_RESET, base + WDOG_CFG_OFFSET);
+	writel(WDT_MODE_EN, base + WDOG_MODE_OFFSET);
+	writel(WDT_CTRL_KEY | WDT_CTRL_RESTART, base + WDOG_CTRL_OFFSET);
+
+	/* Wait for reset */
+	while (1);
+}
+
 DT_MACHINE_START(SUNIV_DT, "Allwinner suniv Family")
 	.dt_compat	= suniv_board_dt_compat,
+	.restart = suniv_restart,
 MACHINE_END
